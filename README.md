@@ -42,7 +42,7 @@ The calculator determines:
 
 ```bash
 git clone https://github.com/ozakary/NMR-VASP.git
-cd vasp-nmr-calculator
+cd NMR-VASP
 ```
 
 ### 2. Install dependencies
@@ -54,7 +54,7 @@ pip install numpy
 ### 3. Make the script executable (optional)
 
 ```bash
-chmod +x nmr_calculator.py
+chmod +x nmr_vasp.py
 ```
 
 ## Usage
@@ -62,13 +62,13 @@ chmod +x nmr_calculator.py
 Run the calculator with your POSCAR and OUTCAR files:
 
 ```bash
-python nmr_calculator.py --poscar /path/to/POSCAR --outcar /path/to/OUTCAR
+python nmr_vasp.py --poscar /path/to/POSCAR --outcar /path/to/OUTCAR
 ```
 
 Or if you made it executable:
 
 ```bash
-./nmr_calculator.py --poscar /path/to/POSCAR --outcar /path/to/OUTCAR
+./nmr_vasp.py --poscar /path/to/POSCAR --outcar /path/to/OUTCAR
 ```
 
 ### Command-line Arguments
@@ -85,7 +85,7 @@ Or if you made it executable:
 ### Example
 
 ```bash
-python nmr_calculator.py --poscar POSCAR --outcar OUTCAR --report my_nmr_report.txt --verbosity 2
+python nmr_vasp.py --poscar POSCAR --outcar OUTCAR --report my_nmr_report.txt --verbosity 2
 ```
 
 ## Output Files
