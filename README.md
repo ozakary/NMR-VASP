@@ -136,10 +136,6 @@ The calculator extracts the following data from VASP output files:
    - Extracts quadrupolar parameters if available
 4. Results are written to the specified output files
 
-## Acknowledgments
-
-This code is based on work by O. Zakary (ouail.zakary@oulu.fi).
-
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
