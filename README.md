@@ -41,7 +41,7 @@ The calculator determines:
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/yourusername/vasp-nmr-calculator.git
+git clone https://github.com/ozakary/NMR-VASP.git
 cd vasp-nmr-calculator
 ```
 
