@@ -148,4 +148,4 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 For questions or issues, please contact:
 - Original code author: Ouail Zakary (ouail.zakary@oulu.fi)
-- GitHub issues: https://github.com/yourusername/vasp-nmr-calculator/issues
+- GitHub issues: https://github.com/ozakary/NMR-VASP/issues
