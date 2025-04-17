@@ -132,7 +132,7 @@ The calculator extracts the following data from VASP output files:
 3. For each atom, it:
    - Calculates the total tensor including all contributions
    - Diagonalizes the tensor to obtain principal components
-   - Computes derived parameters (σᵢₛₒ, σCSA, ηCSA, span, skew)
+   - Computes derived parameters (σ<sub>iso</sub>, σ<sub>CSA</sub>, η<sub>CSA</sub>, span, skew)
    - Extracts quadrupolar parameters if available
 4. Results are written to the specified output files
 
