@@ -1,4 +1,4 @@
-# NMR Parameters Calculator from VASP
+# NMR Parameters Analysis from VASP
 
 **Author:** Ouail Zakary  
 **ORCID:** [0000-0002-7793-3306](https://orcid.org/0000-0002-7793-3306)  
