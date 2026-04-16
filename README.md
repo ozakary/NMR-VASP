@@ -1,10 +1,12 @@
 # NMR Parameters Analysis from VASP
 
-**Author:** Ouail Zakary  
-**ORCID:** [0000-0002-7793-3306](https://orcid.org/0000-0002-7793-3306)  
-**E-mail:** [Ouail.Zakary@oulu.fi](mailto:Ouail.Zakary@oulu.fi)  
-**Website:** [Ouail Zakary - webpage](https://cc.oulu.fi/~nmrwww/members/Ouail_Zakary.html)  
-**Academic Portfolio:** [Ouail Zakary - academic portfolio](https://ozakary.github.io/)  
+---
+- 📄 Author: **Ouail Zakary**  
+- 📧 Email: [Ouail.Zakary@oulu.fi](mailto:Ouail.Zakary@oulu.fi)  
+- 🔗 ORCID: [0000-0002-7793-3306](https://orcid.org/0000-0002-7793-3306)  
+- 🌐 Website: [Personal Webpage](https://cc.oulu.fi/~nmrwww/members/Ouail_Zakary.html)  
+- 📁 Portfolio: [Academic Portfolio](https://ozakary.github.io/)
+---
 
 A Python tool to extract and calculate Nuclear Magnetic Resonance (NMR) parameters from VASP output files.
 
