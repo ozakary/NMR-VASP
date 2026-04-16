@@ -35,36 +35,32 @@ class NMRCalculator:
         symm_tensors = []
 
         with open(self.outcar_file, 'r') as file:
-            content = file.read()
-        
+            lines = file.readlines()
+
         # Locate the section containing the symmetrized tensors
-        start_keyword = 'SYMMETRIZED TENSORS'
-        start_index = content.find(start_keyword)
-        
-        if start_index == -1:
+        # NOTE: 'SYMMETRIZED TENSORS' must be matched carefully because
+        # 'UNSYMMETRIZED TENSORS' contains it as a substring.
+        start_line_idx = None
+        for idx, line in enumerate(lines):
+            if 'SYMMETRIZED TENSORS' in line and 'UNSYMMETRIZED' not in line:
+                start_line_idx = idx + 1
+                break
+
+        if start_line_idx is None:
             if self.verbosity > 0:
                 print("SYMMETRIZED TENSORS section not found.")
             return []
 
-        # Extract the section containing the tensors
-        section_start = content.find('\n', start_index) + 1
-        section_end = content.find('-------------------------------------------------------------', section_start)
-        tensor_section = content[section_start:section_end].strip()
-
-        # Split the tensor section into lines
-        lines = tensor_section.split('\n')
+        lines = lines[start_line_idx:]
         
         i = 0
         while i < len(lines):
             line = lines[i].strip()
 
             if line.startswith('ion'):
-                # Skip the 'ion <number>' line
                 i += 1
-                
                 tensor_data = []
-                
-                # Read the next three lines which contain the tensor matrix
+
                 for _ in range(3):
                     if i < len(lines):
                         tensor_row = [float(x) for x in lines[i].strip().split()]
@@ -72,7 +68,7 @@ class NMRCalculator:
                         i += 1
                     else:
                         break
-                
+
                 if len(tensor_data) == 3:
                     symm_tensors.append(np.array(tensor_data, dtype=float))
             else:
@@ -254,6 +250,151 @@ class NMRCalculator:
                         
         return core_suscept, volume
 
+    def extract_vasp_csa_reference(self):
+        """
+        Extract VASP's own reported sigma_iso, span, and skew from the CSA tensor block
+        in the OUTCAR file. Specifically reads the 'absolute, valence and core' section
+        under 'INCLUDING G=0 CONTRIBUTION'.
+
+        The OUTCAR block has this structure:
+          CSA tensor (J. Mason, ...)
+          ...
+            EXCLUDING G=0 CONTRIBUTION    INCLUDING G=0 CONTRIBUTION
+          ATOM    ISO_SHIFT  SPAN  SKEW    ISO_SHIFT  SPAN  SKEW
+          (absolute, valence only)
+             1   ...
+          (absolute, valence and core)
+             1   excl_iso  excl_span  excl_skew   incl_iso  incl_span  incl_skew
+             2   ...
+
+        Returns a dict: {ion_index (1-based): {'sigma_iso': ..., 'span': ..., 'skew': ...}}
+        """
+        reference = {}
+
+        with open(self.outcar_file, 'r') as f:
+            lines = f.readlines()
+
+        # Locate the CSA tensor block
+        csa_start = None
+        for i, line in enumerate(lines):
+            if 'CSA tensor' in line:
+                csa_start = i
+                break
+
+        if csa_start is None:
+            if self.verbosity > 0:
+                print("Warning: 'CSA tensor' block not found in OUTCAR. Sanity check skipped.")
+            return {}
+
+        # Within the block, find '(absolute, valence and core)'
+        core_section_start = None
+        for i in range(csa_start, len(lines)):
+            if 'absolute' in lines[i].lower() and 'core' in lines[i].lower() and 'valence' in lines[i].lower():
+                core_section_start = i + 1
+                if self.verbosity > 1:
+                    print(f"  Found core section at line {i}: {lines[i].rstrip()}")
+                break
+
+        if core_section_start is None:
+            if self.verbosity > 0:
+                print("Warning: '(absolute, valence and core)' sub-block not found. Sanity check skipped.")
+            return {}
+
+        # Read atom lines until the closing dashes
+        for line in lines[core_section_start:]:
+            stripped = line.strip()
+            if stripped.startswith('---'):
+                break
+            if not stripped:
+                continue
+            parts = stripped.split()
+            # Expected format: ion  excl_iso  excl_span  excl_skew  incl_iso  incl_span  incl_skew
+            if len(parts) == 7:
+                try:
+                    ion_idx   = int(parts[0])
+                    incl_iso  = float(parts[4])
+                    incl_span = float(parts[5])
+                    incl_skew = float(parts[6])
+                    reference[ion_idx] = {
+                        'sigma_iso': incl_iso,
+                        'span':      incl_span,
+                        'skew':      incl_skew,
+                    }
+                except (ValueError, IndexError):
+                    if self.verbosity > 1:
+                        print(f"Skipping CSA reference line: {line.rstrip()}")
+
+        return reference
+
+    def run_sanity_check(self, tolerance=0.0001):
+        """
+        Compare the computed sigma_iso, span, and skew against VASP's own reported
+        values from the 'CSA tensor / absolute, valence and core / including G=0' block.
+
+        Values should be IDENTICAL to 4 decimal places. Any discrepancy flags a
+        bug in the tensor assembly, conversion factor, or format parsing.
+
+        Parameters
+        ----------
+        tolerance : float
+            Maximum allowed absolute difference (ppm). Default is 0.0001 (4 decimals).
+
+        Returns
+        -------
+        bool
+            True if all atoms match identically, False otherwise.
+        """
+        if not self.results:
+            print("Sanity check: no computed results found. Run calculate_chemical_shifts() first.")
+            return False
+
+        reference = self.extract_vasp_csa_reference()
+        if not reference:
+            print("Sanity check: could not extract VASP reference values.")
+            return False
+
+        print("\n" + "=" * 90)
+        print("SANITY CHECK: Computed vs. VASP-reported (absolute, valence+core, incl. G=0)")
+        print("  Note: VASP ISO_SHIFT sign is reversed; reference values shown here as -ISO_SHIFT.")
+        print("=" * 90)
+        print(f"{'Ion':>4}  {'Elem':>4}  "
+              f"{'σ_iso calc':>12} {'σ_iso VASP':>12} {'Δσ_iso':>9}  "
+              f"{'Span calc':>10} {'Span VASP':>10} {'ΔSpan':>8}  "
+              f"{'Skew calc':>10} {'Skew VASP':>10} {'ΔSkew':>8}  {'Status':>8}")
+        print("-" * 90)
+
+        all_pass = True
+        for result in self.results:
+            ion = result['ion']
+            ref = reference.get(ion)
+            if ref is None:
+                print(f"{ion:>4}  {'?':>4}  -- no VASP reference entry --")
+                continue
+
+            d_iso  = abs(result['sigma_iso'] - (-ref['sigma_iso']))
+            d_span = abs(result['span']      - ref['span'])
+            d_skew = abs(result['skew']      - ref['skew'])
+
+            ok = (d_iso <= tolerance) and (d_span <= tolerance) and (d_skew <= tolerance)
+            status = "OK" if ok else "MISMATCH"
+            if not ok:
+                all_pass = False
+
+            print(f"{ion:>4}  {result['element']:>4}  "
+                  f"{result['sigma_iso']:>12.4f} {-ref['sigma_iso']:>12.4f} {d_iso:>9.4f}  "
+                  f"{result['span']:>10.4f} {ref['span']:>10.4f} {d_span:>8.4f}  "
+                  f"{result['skew']:>10.4f} {ref['skew']:>10.4f} {d_skew:>8.4f}  {status:>8}")
+
+        print("=" * 90)
+        if all_pass:
+            print(f"✓ All atoms are identical to 4 decimal places.")
+        else:
+            print(f"✗ Some atoms differ — the computed values do not reproduce VASP's output exactly.")
+            print(f"  Likely causes: wrong tensor format (3×3 vs Voigt), wrong conversion factor, or sign issue.")
+        print("=" * 90 + "\n")
+
+        return all_pass
+
     def read_outcar(self):
         """
         Read and extract all data from OUTCAR file.
@@ -272,7 +413,14 @@ class NMRCalculator:
         symm_tensors, g0_contrib, core_suscept, volume, core_nmr, quadrupolar_params = self.read_outcar()
         
         if self.verbosity > 0:
-            print(f"Processing NMR parameters for {len(symm_tensors)} atoms...")
+            print(f"Processing NMR parameters for {len(element_list)} atoms...")
+
+        # Cap tensors to actual atom count — OUTCAR may contain multiple tensor blocks
+        if len(symm_tensors) != len(element_list):
+            if self.verbosity > 0:
+                print(f"  Note: found {len(symm_tensors)} tensors in OUTCAR but {len(element_list)} atoms in POSCAR. "
+                      f"Using first {len(element_list)} tensors.")
+            symm_tensors = symm_tensors[:len(element_list)]
         
         # Organize quadrupolar parameters by ion index for quick lookup
         quad_lookup = {param['ion']: param for param in quadrupolar_params}
@@ -331,12 +479,17 @@ class NMRCalculator:
             
             # Calculate tensor properties
             sigma_iso = (sigma_11 + sigma_22 + sigma_33) / 3
-            sigma_csa = sigma_33 - (sigma_11 + sigma_22) / 2
             span = sigma_33 - sigma_11
             skew = 3 * (sigma_iso - sigma_22) / span if span != 0 else 0
             
-            # Calculate asymmetry parameter (eta_csa)
-            eta_csa = (sigma_22 - sigma_11) / (sigma_33 - sigma_iso) if (sigma_33 - sigma_iso) != 0 else 0
+            # Calculate CSA and asymmetry parameter (Haeberlen convention)
+            # sigma_zz is the component furthest from sigma_iso
+            if abs(sigma_33 - sigma_iso) >= abs(sigma_11 - sigma_iso):
+                sigma_csa = sigma_33 - sigma_iso   # Δσ > 0
+                eta_csa = (sigma_22 - sigma_11) / sigma_csa if sigma_csa != 0 else 0
+            else:
+                sigma_csa = sigma_11 - sigma_iso   # Δσ < 0
+                eta_csa = (sigma_22 - sigma_33) / sigma_csa if sigma_csa != 0 else 0
             
             # Get quadrupolar parameters if available
             c_q = quad_lookup.get(i+1, {}).get('Cq', None)
@@ -372,6 +525,15 @@ class NMRCalculator:
         """Write the final results to a detailed report file."""
         with open(output_file, 'w') as file:
             file.write(f"####################################< There are {len(self.results)} atoms in this system >#############################################\n")
+            file.write("#\n")
+            file.write("# Convention: Principal components ordered as σ_11 ≤ σ_22 ≤ σ_33 (shielding convention,\n")
+            file.write("#   σ_11 = least shielded, σ_33 = most shielded).\n")
+            file.write("#   σ_csa = σ_zz - σ_iso (Haeberlen reduced anisotropy / CSA); σ_zz is the principal\n")
+            file.write("#   component furthest from σ_iso. σ_csa > 0 if σ_33 dominates, σ_csa < 0 if σ_11 dominates.\n")
+            file.write("#   η_csa = (σ_yy - σ_xx) / σ_csa ∈ [0, 1] (Haeberlen asymmetry parameter).\n")
+            file.write("#   Span Ω = σ_33 - σ_11, Skew κ = 3(σ_iso - σ_22) / Ω (Herzfeld-Berger convention).\n")
+            file.write("#   Note: the full anisotropy Δσ = (3/2) σ_csa if needed.\n")
+            file.write("#\n")
             for result in self.results:
                 file.write("\n")
                 file.write(f"Ion Index.: {result['ion']}\n")
@@ -419,6 +581,12 @@ class NMRCalculator:
             # Write header
             file.write("# VASP NMR Parameters - Organized Report\n\n")
             file.write(f"Total atoms: {len(self.results)}\n\n")
+            file.write("## Convention\n\n")
+            file.write("- Principal components: σ_11 ≤ σ_22 ≤ σ_33 (shielding convention; σ_11 = least shielded, σ_33 = most shielded)\n")
+            file.write("- σ_csa = σ_zz − σ_iso (Haeberlen reduced anisotropy / CSA); σ_zz is the component furthest from σ_iso; σ_csa > 0 if σ_33 dominates, σ_csa < 0 if σ_11 dominates\n")
+            file.write("- η_csa ∈ [0, 1]: Haeberlen asymmetry parameter, η = (σ_yy − σ_xx) / σ_csa\n")
+            file.write("- Span Ω = σ_33 − σ_11, Skew κ = 3(σ_iso − σ_22) / Ω (Herzfeld-Berger convention)\n")
+            file.write("- Note: full anisotropy Δσ = (3/2) σ_csa if needed\n\n")
             
             # Write magnetic shielding parameters table
             file.write("## Magnetic Shielding Parameters\n\n")
@@ -492,6 +660,8 @@ def main():
     parser.add_argument('--organized_report', required=False, default='nmr_organized_report.md', help='Output file for organized report')
     parser.add_argument('--csv', required=False, default='nmr_data.csv', help='Output file for CSV data')
     parser.add_argument('--verbosity', type=int, choices=[0, 1, 2], default=1, help='Verbosity level: 0=silent, 1=normal, 2=verbose')
+    parser.add_argument('--sanity_check', action='store_true', help='Compare computed parameters against VASP-reported CSA tensor values')
+    parser.add_argument('--tolerance', type=float, default=0.0001, help='Tolerance in ppm for sanity check comparison (default: 0.0001, i.e. 4-decimal agreement)')
     
     args = parser.parse_args()
     
@@ -507,6 +677,10 @@ def main():
     # Initialize calculator and process data
     calculator = NMRCalculator(args.outcar, args.poscar, args.verbosity)
     calculator.calculate_chemical_shifts()
+
+    # Optional sanity check against VASP's own CSA tensor block
+    if args.sanity_check:
+        calculator.run_sanity_check(tolerance=args.tolerance)
     
     # Write output files
     calculator.write_detailed_report(args.report)
