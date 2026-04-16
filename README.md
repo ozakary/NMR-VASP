@@ -143,5 +143,5 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 ## Contact
 
 For questions or issues, please contact:
-- Original code author: Ouail Zakary (ouail.zakary@oulu.fi)
+- Code author: Ouail Zakary (ouail.zakary@oulu.fi)
 - GitHub issues: https://github.com/ozakary/NMR-VASP/issues
