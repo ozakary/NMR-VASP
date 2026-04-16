@@ -202,24 +202,31 @@ class NMRCalculator:
     def extract_g0_contribution(self):
         """Extract G=0 contribution to chemical shift from OUTCAR."""
         g0_contrib = None
-        
+
         with open(self.outcar_file, 'r') as file:
             lines = file.readlines()
 
         for i, line in enumerate(lines):
             if "G=0 CONTRIBUTION TO CHEMICAL SHIFT" in line:
-                start_index = i + 5
-                if start_index + 2 < len(lines):
-                    try:
-                        g0_contrib = np.array([
-                            [float(x) for x in lines[start_index].split()[1:]],
-                            [float(x) for x in lines[start_index + 1].split()[1:]],
-                            [float(x) for x in lines[start_index + 2].split()[1:]]
-                        ])
-                    except (ValueError, IndexError):
-                        if self.verbosity > 0:
-                            print("Error extracting G=0 contribution.")
-                        g0_contrib = None
+                # Search forward for the first line with 3 numeric columns (the 3x3 matrix rows)
+                matrix_rows = []
+                for j in range(i + 1, min(i + 20, len(lines))):
+                    parts = lines[j].strip().split()
+                    # Each matrix row has an index + 3 floats = 4 columns
+                    if len(parts) == 4:
+                        try:
+                            row = [float(x) for x in parts[1:]]  # skip row index
+                            matrix_rows.append(row)
+                            if len(matrix_rows) == 3:
+                                break
+                        except ValueError:
+                            continue
+
+                if len(matrix_rows) == 3:
+                    g0_contrib = np.array(matrix_rows)
+                else:
+                    if self.verbosity > 0:
+                        print("Error extracting G=0 contribution.")
                 break
 
         return g0_contrib
